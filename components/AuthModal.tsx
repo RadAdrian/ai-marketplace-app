@@ -58,7 +58,12 @@ const AuthModal: React.FC<AuthModalProps> = ({ isOpen, initialMode = 'login', me
       } else { // mode === 'register'
         const authResponse = await signUp({ email, password });
         if (authResponse.error) {
-          if (authResponse.error.message.toLowerCase().includes("user already registered")) {
+          const errorMessageLower = authResponse.error.message.toLowerCase();
+          if (errorMessageLower.includes("user already registered") || 
+              errorMessageLower.includes("already been registered") ||
+              (authResponse.error.status === 400 && errorMessageLower.includes("user with this email already exists")) || // Common pattern for some backends
+              (authResponse.error.status === 422 && errorMessageLower.includes("already registered")) // Another common status
+            ) {
             setError("This email is already registered. Please try logging in.");
             setMode('login'); 
           } else {
@@ -66,19 +71,24 @@ const AuthModal: React.FC<AuthModalProps> = ({ isOpen, initialMode = 'login', me
           }
         } else if (authResponse.user) {
           // User object exists, no explicit error from signUp.
-          // Now check if this user is already confirmed.
+          // Now check if this user is already confirmed based on the info in *this signUp response*.
+          // This relies on `email_confirmed_at` being set in the signUp response if the user was *already* confirmed.
+          // If Supabase always nullifies this in signUp responses to indicate "confirmation process active",
+          // then this check won't distinguish an already-confirmed user from a new one without an explicit error above.
           if (authResponse.user.email_confirmed_at && authResponse.user.aud === 'authenticated') {
-            // User is already confirmed and trying to re-register
             setError("This email is already registered and confirmed. Please log in.");
             setMode('login');
           } else {
-            // User is new, or exists but unconfirmed, or confirmation status is unclear from aud
-            // In any of these cases, prompting to check email is appropriate.
+            // This path is taken if:
+            // 1. The user is genuinely new (email_confirmed_at will be null/undefined).
+            // 2. The user exists but is unconfirmed (email_confirmed_at will be null/undefined).
+            // 3. The user exists and *is* confirmed in the DB, BUT the signUp response object
+            //    does not include email_confirmed_at (or sets it to null) for this re-signup attempt.
+            // In case 3, the client gets the same info as for cases 1 & 2.
             setError("Registration successful! Please check your email to confirm your account.");
           }
         } else {
           // Fallback, should ideally not be reached if signUp always returns user or error
-          // but if it does, assume confirmation is needed.
           setError("Registration request processed. If this is a new account, please check your email to confirm.");
         }
       }
