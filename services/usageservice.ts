@@ -1,5 +1,5 @@
 import { supabase } from './supabaseClient';
-
+  
 const USER_MESSAGE_LOG_TABLE = 'user_message_log';
 
 /**
