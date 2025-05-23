@@ -55,30 +55,31 @@ const AuthModal: React.FC<AuthModalProps> = ({ isOpen, initialMode = 'login', me
           setError(authResponse.error.message);
         }
         // On successful login, onAuthStateChange in App.tsx will handle closing the modal
-        // and calling onAuthSuccess.
       } else { // mode === 'register'
         const authResponse = await signUp({ email, password });
         if (authResponse.error) {
           if (authResponse.error.message.toLowerCase().includes("user already registered")) {
             setError("This email is already registered. Please try logging in.");
-            setMode('login'); // Switch to login mode
+            setMode('login'); 
           } else {
             setError(authResponse.error.message);
           }
         } else if (authResponse.user) {
-          // User object exists, no error from signUp.
-          // Check if confirmation is needed.
-          // Supabase returns user object even if confirmation is pending.
-          // user.aud === 'authenticated' means they are fully authenticated (e.g. if email confirmation is off)
-          // user.identities might be empty if it's a new unconfirmed email user.
-          if (authResponse.user.aud !== 'authenticated' || (authResponse.user.identities && authResponse.user.identities.length === 0) ) {
+          // User object exists, no explicit error from signUp.
+          // Now check if this user is already confirmed.
+          if (authResponse.user.email_confirmed_at && authResponse.user.aud === 'authenticated') {
+            // User is already confirmed and trying to re-register
+            setError("This email is already registered and confirmed. Please log in.");
+            setMode('login');
+          } else {
+            // User is new, or exists but unconfirmed, or confirmation status is unclear from aud
+            // In any of these cases, prompting to check email is appropriate.
             setError("Registration successful! Please check your email to confirm your account.");
           }
-          // If user is created and authenticated (e.g. email confirmation off),
-          // onAuthStateChange in App.tsx will handle modal close.
         } else {
           // Fallback, should ideally not be reached if signUp always returns user or error
-          setError("Registration successful! Please check your email to confirm your account.");
+          // but if it does, assume confirmation is needed.
+          setError("Registration request processed. If this is a new account, please check your email to confirm.");
         }
       }
       
@@ -160,12 +161,12 @@ const AuthModal: React.FC<AuthModalProps> = ({ isOpen, initialMode = 'login', me
           </div>
 
           {error && (
-            <p className={`text-sm p-3 rounded-md border ${error.includes("confirm your account") ? "bg-sky-700/50 text-sky-100 border-sky-600" : "bg-red-700/50 text-red-100 border-red-600"}`} role="alert">
+            <p className={`text-sm p-3 rounded-md border ${error.includes("confirm your account") || error.includes("Registration request processed") ? "bg-sky-700/50 text-sky-100 border-sky-600" : "bg-red-700/50 text-red-100 border-red-600"}`} role="alert">
               {error}
             </p>
           )}
           
-          {mode === 'register' && !error?.includes("confirm your account") && !error?.includes("already registered") && ( 
+          {mode === 'register' && !error?.includes("confirm your account") && !error?.includes("already registered") && !error?.includes("Registration request processed") && ( 
              <p className="text-xs text-neutral-400">
                 By creating an account, you agree to our terms. A confirmation email may be sent.
              </p>
