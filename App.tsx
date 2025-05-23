@@ -138,6 +138,7 @@ const App: React.FC = () => {
   }, []);
 
   const handleAddAssistant = useCallback(async (newAssistantData: NewAIAssistant) => {
+          console.log('[handleAddAssistant] currentUser:', currentUser);
     if (!currentUser) {
       // Guest user: don't save to global DB, just set local flag and inform.
       try {
@@ -254,7 +255,7 @@ const App: React.FC = () => {
       )}
       <CustomAICreationModal
         isOpen={isCustomAICreationModalOpen}
-        onClose={handleCloseCustomAICreationModal}
+        onClose={chandleCloseCustomAICreationModal}
         onAddAssistant={handleAddAssistant}
       />
       <AuthModal
