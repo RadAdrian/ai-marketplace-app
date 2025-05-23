@@ -1,5 +1,4 @@
 
-
 import React, { useState, useCallback, useEffect } from 'react';
 import { AIAssistant, NewAIAssistant, User } from './types';
 import { fetchAssistants, addAssistant } from './services/assistantService';
@@ -140,18 +139,24 @@ const App: React.FC = () => {
   }, []);
 
   const handleAddAssistant = useCallback(async (newAssistantData: NewAIAssistant) => {
+    if (!currentUser) {
+      // Guest user: don't save to global DB, just set local flag and inform.
+      try {
+          localStorage.setItem(GUEST_CREATED_AI_KEY, 'true');
+      } catch (e) {
+          console.warn("Could not access localStorage to set guest AI limit:", e);
+      }
+      setGuestHasCreatedAI(true);
+      handleCloseCustomAICreationModal();
+      alert("Your custom AI assistant has been designed for this session! To save and share assistants, please register or log in.");
+      return; 
+    }
+
+    // Logged-in user: save to Supabase
     try {
       const addedAssistant = await addAssistant(newAssistantData); 
       setAssistants(prevAssistants => [addedAssistant, ...prevAssistants]);
       handleCloseCustomAICreationModal();
-      if (!currentUser) { 
-        try {
-            localStorage.setItem(GUEST_CREATED_AI_KEY, 'true');
-        } catch (e) {
-            console.warn("Could not access localStorage to set guest AI limit:", e);
-        }
-        setGuestHasCreatedAI(true);
-      }
     } catch (error) {
       console.error("Failed to add assistant:", error);
       alert(`Error creating assistant: ${error instanceof Error ? error.message : "Unknown error"}`);
