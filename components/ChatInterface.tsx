@@ -154,6 +154,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
     
     // Log message for authenticated user or update guest count
     if (userId && assistantId) {
+      console.log(`[ChatInterface] Attempting to log message. User ID: ${userId}, Assistant ID: ${assistantId}`); // DEBUG LOG
       await logUserMessage(userId, assistantId); // Log before AI call
       setUserMessagesLast24h(prev => prev + 1); // Optimistically update count
     } else if (assistantId) { // Guest user
@@ -358,3 +359,4 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
 };
 
 export default ChatInterface;
+    
