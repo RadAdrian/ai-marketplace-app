@@ -1,4 +1,3 @@
-
 import React, { useState, useCallback, useEffect } from 'react';
 import { AIAssistant, NewAIAssistant, User } from './types';
 import { fetchAssistants, addAssistant } from './services/assistantService';
@@ -154,6 +153,7 @@ const App: React.FC = () => {
 
     // Logged-in user: save to Supabase
     try {
+      console.log('[handleAddAssistant] currentUser:', currentUser);
       const addedAssistant = await addAssistant(newAssistantData); 
       setAssistants(prevAssistants => [addedAssistant, ...prevAssistants]);
       handleCloseCustomAICreationModal();
