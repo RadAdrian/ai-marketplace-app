@@ -1,3 +1,4 @@
+
 import { supabase } from './supabaseClient';
 import { ChatMessage } from '../types';
 
@@ -20,17 +21,24 @@ export const fetchConversationHistory = async (userId: string, assistantId: stri
       .select('history')
       .eq('user_id', userId)
       .eq('assistant_id', assistantId)
-      .single();
+      // Removed .single() - we expect an array, which might be empty
+      .limit(1); // Still only expect one record if it exists
 
     if (error) {
-      if (error.code === 'PGRST116') { // "PGRST116" is Supabase's code for "Resource Not Found" (0 rows)
-        // No history found, which is not an error in this context.
-        return [];
-      }
+      // No need to specifically check for PGRST116 if not using .single()
+      // A general error indicates a problem with the query or RLS.
       console.error('Error fetching conversation history:', error);
       throw new Error(error.message);
     }
-    return data?.history || [];
+
+    // If data is an array and has at least one element, and that element has 'history'
+    if (data && data.length > 0 && data[0] && data[0].history) {
+      return data[0].history;
+    }
+    
+    // If no record found (data will be an empty array) or history field is missing, return empty array
+    return [];
+
   } catch (error) {
     console.error('Catch block error fetching conversation history:', error);
     // Return empty array on error to allow chat to proceed without history
