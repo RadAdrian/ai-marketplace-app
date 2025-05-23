@@ -48,15 +48,18 @@ const App: React.FC = () => {
   useEffect(() => {
     setIsAuthLoading(true);
     getCurrentUser().then(user => {
+      console.log("[App useEffect] Initial currentUser:", user);
       setCurrentUser(user);
       setIsAuthLoading(false);
       loadAssistantsData(user?.id); // Load assistants based on initial auth state
     });
 
     const authSubscription = onAuthStateChange((event, session) => {
-      console.log("Auth event:", event, session);
+      console.log("[App useEffect] Auth event:", event, "Session:", session);
       const user = session?.user ?? null;
       setCurrentUser(user); // Update current user
+      console.log("[App useEffect] CurrentUser updated by auth event:", user);
+
 
       if (event === "SIGNED_IN") {
         setIsAuthModalOpen(false);
@@ -121,15 +124,17 @@ const App: React.FC = () => {
   }, []);
 
   const handleAddAssistant = useCallback(async (newAssistantData: NewAIAssistant) => {
-    if (!currentUser) {
-      // This path should ideally not be reached due to the check in handleOpenCustomAICreationModal.
-      // Including as a safeguard.
-      console.error("handleAddAssistant called without a logged-in user.");
-      alert("You must be logged in to create an AI assistant.");
-      handleOpenAuthModal('register', "Please log in or register to create AI assistants.");
+    console.log("[App.tsx handleAddAssistant] Attempting to add assistant. CurrentUser:", currentUser);
+    if (!currentUser || !currentUser.id) { // Explicitly check currentUser.id as well
+      console.error("[App.tsx handleAddAssistant] Called without a logged-in user or user.id is missing. CurrentUser:", currentUser);
+      alert("You must be logged in to create an AI assistant. If you are logged in, please try refreshing the page.");
+      if (!currentUser) { // Open auth modal only if currentUser itself is null
+          handleOpenAuthModal('register', "Please log in or register to create AI assistants.");
+      }
       return;
     }
 
+    console.log('[App.tsx handleAddAssistant] CurrentUser ID being passed to service:', currentUser.id);
     try {
       const addedAssistant = await addAssistant(newAssistantData, currentUser.id); 
       setAssistants(prevAssistants => [addedAssistant, ...prevAssistants]);

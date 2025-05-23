@@ -4,6 +4,21 @@ import { AIAssistant, NewAIAssistant } from '../types';
 
 const ASSISTANTS_TABLE = 'assistants';
 
+// Define a more specific type for the data being inserted
+interface AssistantInsertPayload {
+  name: string;
+  tagline: string;
+  description: string;
+  category: string;
+  price: string;
+  image_url: string;
+  features: string[];
+  system_prompt: string;
+  accent_color: string;
+  user_id: string; // Must be a string
+}
+
+
 export const fetchAssistants = async (userId?: string): Promise<AIAssistant[]> => {
   let query = supabase
     .from(ASSISTANTS_TABLE)
@@ -44,7 +59,16 @@ export const fetchAssistants = async (userId?: string): Promise<AIAssistant[]> =
 };
 
 export const addAssistant = async (assistantData: NewAIAssistant, userId: string): Promise<AIAssistant> => {
-  const dataToInsert: any = {
+  console.log('[assistantService addAssistant] Received userId:', userId);
+  console.log('[assistantService addAssistant] Received assistantData:', assistantData);
+
+  if (!userId || typeof userId !== 'string' || userId.trim() === '') {
+    // This check is crucial. If userId is not a valid string, we should not proceed.
+    console.error('[assistantService addAssistant] Invalid userId received:', userId);
+    throw new Error('Invalid user ID provided for adding assistant.');
+  }
+
+  const dataToInsert: AssistantInsertPayload = {
     name: assistantData.name,
     tagline: assistantData.tagline,
     description: assistantData.description,
@@ -57,6 +81,8 @@ export const addAssistant = async (assistantData: NewAIAssistant, userId: string
     user_id: userId, // Associate with the creating user
   };
 
+  console.log('[assistantService addAssistant] Data being inserted to Supabase:', JSON.stringify(dataToInsert, null, 2));
+
   const { data, error } = await supabase
     .from(ASSISTANTS_TABLE)
     .insert([dataToInsert])
@@ -64,12 +90,15 @@ export const addAssistant = async (assistantData: NewAIAssistant, userId: string
     .single();
 
   if (error) {
-    console.error('Error adding assistant:', error);
-    throw new Error(error.message);
+    console.error('Error adding assistant to Supabase:', error);
+    throw new Error(`Supabase error: ${error.message} (Details: ${error.details}, Hint: ${error.hint})`);
   }
   if (!data) {
+    console.error('[assistantService addAssistant] No data returned from Supabase after insert.');
     throw new Error('Failed to add assistant, no data returned from Supabase after insert.');
   }
+  
+  console.log('[assistantService addAssistant] Assistant added successfully, returned data:', data);
 
   return {
     id: data.id,
