@@ -47,6 +47,11 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
   const chatEndRef = useRef<null | HTMLDivElement>(null);
   const textareaRef = useRef<null | HTMLTextAreaElement>(null);
 
+  // Log props when they change
+  useEffect(() => {
+    console.log(`[ChatInterface Props Check] userId: ${userId}, assistantId: ${assistantId}`);
+  }, [userId, assistantId]);
+
   const scrollToBottom = useCallback(() => {
     chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
   },[]);
@@ -62,11 +67,13 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
 
   useEffect(() => {
     const loadChatData = async () => {
-      setMessages([]); // Clear previous messages on assistant/user change
-      setIsUserMessageLimitReachedState(false); // Reset limit state
-      setError(null); // Clear previous errors
+      console.log(`[ChatInterface loadChatData] Called. userId: ${userId}, assistantId: ${assistantId}`);
+      setMessages([]); 
+      setIsUserMessageLimitReachedState(false); 
+      setError(null); 
 
-      if (userId && assistantId) { // Logged-in user
+      if (userId && assistantId) { 
+        console.log('[ChatInterface loadChatData] Logged-in user flow.');
         setIsHistoryLoading(true);
         setIsUserMessageLimitLoading(true);
         setGuestMessagesSent(0); 
@@ -75,36 +82,39 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
             fetchConversationHistory(userId, assistantId),
             getUserMessagesInLast24Hours(userId)
           ]);
-
+          console.log(`[ChatInterface loadChatData] Fetched history (length ${history.length}) and message count (${count}).`);
           setMessages(history.length > 0 ? history : [getInitialGreeting()]);
           setUserMessagesLast24h(count);
 
           if (count >= MAX_USER_MESSAGES_24H) {
             setIsUserMessageLimitReachedState(true);
             setError(`You have reached your message limit of ${MAX_USER_MESSAGES_24H} for the past 24 hours. Please try again later.`);
+            console.log('[ChatInterface loadChatData] User message limit reached on load.');
           }
         } catch (err) {
-          console.error("Failed to load conversation history or usage count:", err);
+          console.error("[ChatInterface loadChatData] Failed to load conversation history or usage count:", err);
           setError("Could not load chat data. Starting fresh.");
           setMessages([getInitialGreeting()]);
-          setUserMessagesLast24h(0); // Default to 0 if fetch fails
+          setUserMessagesLast24h(0);
         } finally {
           setIsHistoryLoading(false);
           setIsUserMessageLimitLoading(false);
         }
-      } else if (assistantId) { // Guest user
+      } else if (assistantId) { 
+        console.log('[ChatInterface loadChatData] Guest user flow.');
         setIsHistoryLoading(false); 
         setIsUserMessageLimitLoading(false);
-        setUserMessagesLast24h(0); // Reset user message count for guests
+        setUserMessagesLast24h(0); 
         try {
             const count = parseInt(sessionStorage.getItem(getGuestMessageCountKey(assistantId)) || '0', 10);
             setGuestMessagesSent(count);
         } catch(e) {
-            console.warn("Could not access sessionStorage for guest message count:", e);
+            console.warn("[ChatInterface loadChatData] Could not access sessionStorage for guest message count:", e);
             setGuestMessagesSent(0);
         }
         setMessages([getInitialGreeting()]);
-      } else { // No assistantId (should ideally not happen if modal is open)
+      } else { 
+        console.log('[ChatInterface loadChatData] No userId or assistantId. Setting initial greeting.');
         setMessages([getInitialGreeting()]);
         setGuestMessagesSent(0);
         setUserMessagesLast24h(0);
@@ -112,7 +122,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
     };
 
     loadChatData();
-  }, [userId, assistantId, getInitialGreeting]); // assistantName removed, getInitialGreeting depends on it
+  }, [userId, assistantId, getInitialGreeting]); 
   
   useEffect(() => {
     if (textareaRef.current) {
@@ -123,20 +133,29 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
 
 
   const handleSendMessage = useCallback(async () => {
-    if (!userInput.trim() || isLoading || isHistoryLoading || isUserMessageLimitLoading) return;
+    console.log('[ChatInterface Log 1] handleSendMessage called.');
+    console.log(`[ChatInterface Log 2] Initial states: userInput='${userInput}', isLoading=${isLoading}, isHistoryLoading=${isHistoryLoading}, isUserMessageLimitLoading=${isUserMessageLimitLoading}, userId=${userId}, assistantId=${assistantId}`);
 
-    // Guest limit check
+    if (!userInput.trim() || isLoading || isHistoryLoading || isUserMessageLimitLoading) {
+      console.log(`[ChatInterface Log 3] Early exit: userInput empty or loading. userInput: '${userInput.trim()}', isLoading: ${isLoading}, isHistoryLoading: ${isHistoryLoading}, isUserMessageLimitLoading: ${isUserMessageLimitLoading}`);
+      return;
+    }
+
     if (!userId && assistantId) { 
+      console.log('[ChatInterface Log 4] Guest user flow initiated.');
       if (guestMessagesSent >= MAX_GUEST_MESSAGES) {
+        console.log('[ChatInterface Log 5] Guest limit reached.');
         onAuthRequired(`You've reached the ${MAX_GUEST_MESSAGES} message limit for guests with this assistant. Please register or log in to continue chatting.`);
         return;
       }
     }
 
-    // Logged-in user limit check
     if (userId && assistantId) {
+      console.log('[ChatInterface Log 6] Logged-in user flow initiated. Checking message limit.');
+      console.log(`[ChatInterface Log 7] User messages in last 24h: ${userMessagesLast24h}, Limit: ${MAX_USER_MESSAGES_24H}`);
       if (userMessagesLast24h >= MAX_USER_MESSAGES_24H) {
-        setIsUserMessageLimitReachedState(true); // Ensure state is set
+        console.log('[ChatInterface Log 8] Logged-in user message limit reached.');
+        setIsUserMessageLimitReachedState(true); 
         setError(`You have reached your daily message limit of ${MAX_USER_MESSAGES_24H}. Please try again later.`);
         return;
       }
@@ -149,31 +168,32 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
       timestamp: Date.now(),
     };
     
-    // Add user message to UI first
     setMessages(prevMessages => [...prevMessages, newUserMessage]);
     
-    // Log message for authenticated user or update guest count
+    // This is the block we are trying to reach for logged-in users
     if (userId && assistantId) {
-      console.log(`[ChatInterface] Attempting to log message. User ID: ${userId}, Assistant ID: ${assistantId}`); // DEBUG LOG
-      await logUserMessage(userId, assistantId); // Log before AI call
-      setUserMessagesLast24h(prev => prev + 1); // Optimistically update count
+      console.log(`[ChatInterface Log 9] PRE-LOGGING BLOCK REACHED. User ID: ${userId}, Assistant ID: ${assistantId}`);
+      await logUserMessage(userId, assistantId); 
+      setUserMessagesLast24h(prev => prev + 1); 
     } else if (assistantId) { // Guest user
+      console.log('[ChatInterface Log 10] Guest message count update block.');
       const newCount = guestMessagesSent + 1;
       setGuestMessagesSent(newCount);
       try {
         sessionStorage.setItem(getGuestMessageCountKey(assistantId), newCount.toString());
       } catch (e) {
-        console.warn("Could not access sessionStorage to set guest message count:", e);
+        console.warn("[ChatInterface] Could not access sessionStorage to set guest message count:", e);
       }
+    } else {
+      console.log('[ChatInterface Log 11] Neither logged-in user nor guest with assistantId. No logging/counting performed.');
     }
 
     const currentInput = userInput; 
     setUserInput(''); 
     setIsLoading(true);
-    setError(null); // Clear previous errors before new AI call
+    setError(null); 
 
     try {
-      // Pass the most up-to-date messages array to getResponse, including the latest user message
       const historyForGemini = messages.concat(newUserMessage); 
       const aiResponseText = await getResponse(currentInput.trim(), assistantSystemPrompt, historyForGemini);
       
@@ -187,14 +207,13 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
       setMessages(prevMessages => [...prevMessages, newAiMessage]);
 
       if (userId && assistantId) { 
-        // Capture the current state of messages *after* AI response for saving
         setMessages(currentMessagesForSave => {
           saveConversationHistory(userId, assistantId, currentMessagesForSave);
           return currentMessagesForSave; 
         });
       }
     } catch (err) {
-      console.error("Error getting AI response or saving history:", err);
+      console.error("[ChatInterface] Error getting AI response or saving history:", err);
       const errorMessageText = err instanceof Error ? err.message : "An unknown error occurred.";
       const errorAiMessage: ChatMessage = {
         id: (Date.now() + 1).toString(), 
@@ -203,8 +222,6 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
         timestamp: Date.now(),
       };
       setMessages(prevMessages => [...prevMessages, errorAiMessage]);
-      // If AI call fails for a logged-in user, the message was already logged and counted.
-      // This is a design choice: an attempt counts towards the quota.
     } finally {
       setIsLoading(false);
       textareaRef.current?.focus();
@@ -216,11 +233,13 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
     userId, 
     assistantId, 
     guestMessagesSent, 
-    userMessagesLast24h, // Add userMessagesLast24h
+    userMessagesLast24h, 
     onAuthRequired, 
     isLoading, 
     isHistoryLoading,
-    isUserMessageLimitLoading
+    isUserMessageLimitLoading,
+    setError, // Added setError to dependency array
+    setIsUserMessageLimitReachedState // Added setIsUserMessageLimitReachedState
   ]);
 
   const handleResetConversation = async () => {
@@ -229,7 +248,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
     const confirmed = window.confirm("Are you sure you want to reset this conversation? All history with this assistant will be deleted.");
     if (!confirmed) return;
 
-    setIsLoading(true); // Use general isLoading as it affects send button
+    setIsLoading(true); 
     setError(null);
     try {
       await resetConversationHistory(userId, assistantId);
@@ -243,7 +262,6 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
   };
 
   const isGuestLimitReached = !userId && guestMessagesSent >= MAX_GUEST_MESSAGES;
-  // Use the state variable which is updated on load and after reaching the limit
   const isUserLimitEffectivelyReached = userId && (userMessagesLast24h >= MAX_USER_MESSAGES_24H || isUserMessageLimitReachedState) ;
 
 
@@ -274,14 +292,14 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
       </div>
 
       <div className="flex-grow overflow-y-auto p-3 sm:p-4 space-y-3 sm:space-y-4 scrollbar-thin scrollbar-thumb-neutral-600 scrollbar-track-neutral-700/50">
-        {(isHistoryLoading || isUserMessageLimitLoading) && messages.length === 0 && ( // Show loading only if no messages yet
+        {(isHistoryLoading || isUserMessageLimitLoading) && messages.length === 0 && ( 
            <div className="flex justify-center items-center py-10">
              <Spinner />
              <p className="ml-3 text-sm text-neutral-400">Loading chat...</p>
            </div>
         )}
         
-        {!isHistoryLoading && messages.map((msg) => ( // Render messages if not loading history
+        {!isHistoryLoading && messages.map((msg) => ( 
           <div key={msg.id} className={`flex ${msg.sender === 'user' ? 'justify-end' : 'justify-start'}`}>
             <div
               className={`max-w-[85%] sm:max-w-[80%] px-3 py-2 sm:px-4 sm:py-2.5 rounded-lg shadow ${
@@ -298,7 +316,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
           </div>
         ))}
 
-        {isLoading && !isHistoryLoading && ( // AI is thinking
+        {isLoading && !isHistoryLoading && ( 
           <div className="flex justify-start">
             <div className="max-w-[70%] px-3 py-2 sm:px-4 sm:py-2.5 rounded-lg shadow bg-neutral-700 text-neutral-200 flex items-center space-x-2">
               <Spinner />
@@ -307,7 +325,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
           </div>
         )}
 
-        {error && !isHistoryLoading && !isLoading && ( // Display error only if not loading history or AI response
+        {error && !isHistoryLoading && !isLoading && ( 
           <div className="flex justify-center">
             <div className={`max-w-[85%] px-3 py-2 sm:px-4 sm:py-2.5 rounded-lg shadow text-white text-center ${isUserLimitEffectivelyReached ? 'bg-amber-600' : 'bg-red-600'}`}>
               <p className="text-sm sm:text-base">{error}</p>
@@ -317,7 +335,6 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
         <div ref={chatEndRef} />
       </div>
       <div className="p-3 sm:p-4 border-t border-neutral-700/50 flex-shrink-0 bg-neutral-800/50 rounded-b-lg">
-        {/* Display persistent limit message if limit is hit and no other specific error is being shown by the `error` state */}
         {(isGuestLimitReached || isUserLimitEffectivelyReached) && !error && (
             <p className="text-xs text-amber-400 text-center mb-2">
                 {isGuestLimitReached ? "Message limit reached for guests. Please log in or register." : "Daily message limit reached. Please try again later."}
@@ -359,4 +376,3 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
 };
 
 export default ChatInterface;
-    
