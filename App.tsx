@@ -1,3 +1,4 @@
+
 import React, { useState, useCallback, useEffect } from 'react';
 import { AIAssistant, NewAIAssistant, User } from './types';
 import { fetchAssistants, addAssistant } from './services/assistantService';
@@ -11,7 +12,7 @@ import CustomAICreationModal from './components/CustomAICreationModal';
 import AuthModal from './components/AuthModal';
 import Spinner from './components/Spinner';
 
-const GUEST_CREATED_AI_KEY = 'guestCreatedCustomAI';
+// GUEST_CREATED_AI_KEY is no longer needed as guests cannot create assistants.
 
 const App: React.FC = () => {
   const [assistants, setAssistants] = useState<AIAssistant[]>([]);
@@ -27,76 +28,60 @@ const App: React.FC = () => {
   const [authModalMode, setAuthModalMode] = useState<'login' | 'register'>('login');
   const [authModalMessage, setAuthModalMessage] = useState<string | undefined>(undefined);
 
-  const [guestHasCreatedAI, setGuestHasCreatedAI] = useState<boolean>(() => {
+  // guestHasCreatedAI state is removed.
+
+  const loadAssistantsData = useCallback(async (currentUserId?: string) => {
+    setIsLoadingAssistants(true);
+    setFetchError(null);
     try {
-        return localStorage.getItem(GUEST_CREATED_AI_KEY) === 'true';
-    } catch (e) {
-        console.warn("Could not access localStorage for guest AI limit:", e);
-        return false;
+      console.log(`[App - loadAssistantsData] Fetching assistants for user: ${currentUserId || 'guest'}`);
+      const fetchedAssistants = await fetchAssistants(currentUserId);
+      setAssistants(fetchedAssistants);
+    } catch (error) {
+      console.error("Failed to load assistants:", error);
+      setFetchError(error instanceof Error ? error.message : "An unknown error occurred while fetching assistants.");
+    } finally {
+      setIsLoadingAssistants(false);
     }
-  });
+  }, []);
 
   useEffect(() => {
-    const loadInitialData = async () => {
-      setIsLoadingAssistants(true);
-      setFetchError(null);
-      try {
-        const fetchedAssistants = await fetchAssistants();
-        setAssistants(fetchedAssistants);
-      } catch (error) {
-        console.error("Failed to load assistants:", error);
-        setFetchError(error instanceof Error ? error.message : "An unknown error occurred while fetching assistants.");
-      } finally {
-        setIsLoadingAssistants(false);
-      }
-    };
-    loadInitialData();
-
     setIsAuthLoading(true);
     getCurrentUser().then(user => {
       setCurrentUser(user);
       setIsAuthLoading(false);
-      if (!user) { 
-        try {
-            setGuestHasCreatedAI(localStorage.getItem(GUEST_CREATED_AI_KEY) === 'true');
-        } catch (e) {
-            console.warn("Could not access localStorage on initial load:", e);
-        }
-      }
+      loadAssistantsData(user?.id); // Load assistants based on initial auth state
     });
 
     const authSubscription = onAuthStateChange((event, session) => {
       console.log("Auth event:", event, session);
       const user = session?.user ?? null;
-      setCurrentUser(user);
+      setCurrentUser(user); // Update current user
 
       if (event === "SIGNED_IN") {
         setIsAuthModalOpen(false);
         setAuthModalMessage(undefined);
+        // Clear guest-related session storage (e.g., message counts)
         try {
-            localStorage.removeItem(GUEST_CREATED_AI_KEY);
             Object.keys(sessionStorage).forEach(key => {
                 if (key.startsWith('guestMessageCount_')) {
                     sessionStorage.removeItem(key);
                 }
             });
         } catch (e) {
-            console.warn("Could not access localStorage/sessionStorage to clear guest limits:", e);
+            console.warn("Could not access sessionStorage to clear guest limits:", e);
         }
-        setGuestHasCreatedAI(false);
+        loadAssistantsData(user?.id); // Reload assistants for the signed-in user
       } else if (event === "SIGNED_OUT") {
-         try {
-            setGuestHasCreatedAI(localStorage.getItem(GUEST_CREATED_AI_KEY) === 'true');
-        } catch (e) {
-            console.warn("Could not access localStorage on sign out:", e);
-        }
+        loadAssistantsData(); // Reload assistants for guest (public ones)
       }
     });
 
     return () => {
       authSubscription?.unsubscribe();
     };
-  }, []);
+  }, [loadAssistantsData]);
+
 
   const handleSelectAssistant = useCallback((assistant: AIAssistant) => {
     setSelectedAssistant(assistant);
@@ -120,49 +105,40 @@ const App: React.FC = () => {
   }, []);
   
   const handleAuthSuccess = useCallback(() => {
-    // This is handled by onAuthStateChange's "SIGNED_IN" event now.
+    // This is handled by onAuthStateChange's "SIGNED_IN" event.
   }, []);
 
   const handleOpenCustomAICreationModal = useCallback(() => {
     if (!currentUser) { 
-        if (guestHasCreatedAI) {
-            handleOpenAuthModal('register', 'You have created the maximum number of custom AIs allowed for guest users. Please register or log in to create more.');
-            return;
-        }
+        handleOpenAuthModal('register', 'Please log in or register to create custom AI assistants.');
+        return;
     }
     setIsCustomAICreationModalOpen(true);
-  }, [currentUser, guestHasCreatedAI, handleOpenAuthModal]); 
+  }, [currentUser, handleOpenAuthModal]); 
 
   const handleCloseCustomAICreationModal = useCallback(() => {
     setIsCustomAICreationModalOpen(false);
   }, []);
 
   const handleAddAssistant = useCallback(async (newAssistantData: NewAIAssistant) => {
-          console.log('[handleAddAssistant] currentUser:', currentUser);
     if (!currentUser) {
-      // Guest user: don't save to global DB, just set local flag and inform.
-      try {
-          localStorage.setItem(GUEST_CREATED_AI_KEY, 'true');
-      } catch (e) {
-          console.warn("Could not access localStorage to set guest AI limit:", e);
-      }
-      setGuestHasCreatedAI(true);
-      handleCloseCustomAICreationModal();
-      alert("Your custom AI assistant has been designed for this session! To save and share assistants, please register or log in.");
-      return; 
+      // This path should ideally not be reached due to the check in handleOpenCustomAICreationModal.
+      // Including as a safeguard.
+      console.error("handleAddAssistant called without a logged-in user.");
+      alert("You must be logged in to create an AI assistant.");
+      handleOpenAuthModal('register', "Please log in or register to create AI assistants.");
+      return;
     }
 
-    // Logged-in user: save to Supabase
     try {
-      console.log('[handleAddAssistant] currentUser:', currentUser);
-      const addedAssistant = await addAssistant(newAssistantData); 
+      const addedAssistant = await addAssistant(newAssistantData, currentUser.id); 
       setAssistants(prevAssistants => [addedAssistant, ...prevAssistants]);
       handleCloseCustomAICreationModal();
     } catch (error) {
       console.error("Failed to add assistant:", error);
       alert(`Error creating assistant: ${error instanceof Error ? error.message : "Unknown error"}`);
     }
-  }, [currentUser, handleCloseCustomAICreationModal, setGuestHasCreatedAI]);
+  }, [currentUser, handleCloseCustomAICreationModal, handleOpenAuthModal]);
 
 
   const handleLogout = async () => {
@@ -172,10 +148,11 @@ const App: React.FC = () => {
       alert(`Error signing out: ${error.message}`);
     } else {
       setCurrentUser(null); 
+      // onAuthStateChange handles loading public assistants
     }
   };
   
-  if (isAuthLoading && isLoadingAssistants) {
+  if (isAuthLoading && isLoadingAssistants) { // Check both, as assistants load after auth.
     return (
       <div className="min-h-screen flex flex-col justify-center items-center text-neutral-100">
         <Spinner size="large"/>
@@ -183,7 +160,6 @@ const App: React.FC = () => {
       </div>
     );
   }
-
 
   return (
     <div className="min-h-screen flex flex-col text-neutral-100">
@@ -216,19 +192,7 @@ const App: React.FC = () => {
             <p className="text-neutral-300 mb-1">Could not load AI assistants.</p>
             <p className="text-neutral-400 text-sm mb-4">Error: {fetchError}</p>
             <button 
-              onClick={() => { 
-                setIsLoadingAssistants(true); 
-                setFetchError(null);
-                fetchAssistants()
-                  .then(fetchedAssistants => {
-                    setAssistants(fetchedAssistants);
-                    setIsLoadingAssistants(false);
-                  })
-                  .catch(err => {
-                    setFetchError(err.message || "Failed to fetch");
-                    setIsLoadingAssistants(false);
-                  });
-              }}
+              onClick={() => loadAssistantsData(currentUser?.id)}
               className="mt-4 px-6 py-2.5 bg-primary-600 hover:bg-primary-700 text-white font-semibold rounded-md shadow-md hover:shadow-lg transition-all"
             >
               Try Again
@@ -255,7 +219,7 @@ const App: React.FC = () => {
       )}
       <CustomAICreationModal
         isOpen={isCustomAICreationModalOpen}
-        onClose={chandleCloseCustomAICreationModal}
+        onClose={handleCloseCustomAICreationModal}
         onAddAssistant={handleAddAssistant}
       />
       <AuthModal
