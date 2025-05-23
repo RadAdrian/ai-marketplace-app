@@ -1,0 +1,22 @@
+{
+  "name": "ai-marketplace-app",
+  "version": "1.0.0",
+  "description": "AI Assistant Marketplace",
+  "main": "index.tsx",
+  "scripts": {
+    "create-env-config": "node create-env-config.js",
+    "build-js": "esbuild index.tsx --bundle --outfile=public/assets/main.js --jsx=automatic --loader:.ts=tsx --allow-overwrite",
+    "build": "npm run create-env-config && npm run build-js",
+    "start-local-test": "npm run build && live-server public --port=8080 --no-browser"
+  },
+  "dependencies": {
+    "@google/genai": "^1.0.1",
+    "@supabase/supabase-js": "^2.44.4",
+    "react": "^19.1.0",
+    "react-dom": "^19.1.0"
+  },
+  "devDependencies": {
+    "esbuild": "^0.23.0",
+    "live-server": "^1.2.2"
+  }
+}
